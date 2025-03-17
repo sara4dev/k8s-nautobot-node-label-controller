@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -15,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 // NautobotClient is a simple client to query Nautobot for device or rack info.
@@ -56,9 +58,15 @@ func NewNautobotClient(baseURL, authToken string) *NautobotClient {
 // GetDeviceData queries Nautobot for a device's site and rack.
 // In real usage, you'd likely query by a more reliable key, e.g., a device ID or an annotation.
 func (c *NautobotClient) GetDeviceData(nodeName string) (*NautobotDeviceData, error) {
-	// Example: GET /api/dcim/devices/?name=<nodeName>
+	// Extract the hostname part (before the first dot) to query Nautobot
+	hostname := nodeName
+	if dotIndex := strings.Index(nodeName, "."); dotIndex > 0 {
+		hostname = nodeName[:dotIndex]
+	}
+
+	// Example: GET /api/dcim/devices/?name=<hostname>
 	// This is an example endpoint — adjust to your actual Nautobot configuration/URL scheme.
-	url := fmt.Sprintf("%s/api/dcim/devices/?name=%s", c.baseURL, nodeName)
+	url := fmt.Sprintf("%s/api/dcim/devices/?name=%s", c.baseURL, hostname)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -169,6 +177,12 @@ func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // main sets up the manager and starts the controller
 func main() {
+	// Set up logging
+	opts := zap.Options{
+		Development: true,
+	}
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
 	// Grab environment variables or flags for config
 	nautobotURL := os.Getenv("NAUTOBOT_URL")
 	if nautobotURL == "" {
