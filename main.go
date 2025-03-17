@@ -122,6 +122,7 @@ type NodeReconciler struct {
 // Reconcile is where we apply the logic to label the Node from Nautobot data.
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+	logger.Info("Reconciling Node", "NodeName", req.Name)
 
 	// 1. Fetch the Node from Kubernetes
 	var node corev1.Node
@@ -130,14 +131,20 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	logger.Info("Reconciling Node", "NodeName", node.Name)
+	// Check if the node already has our labels and they're non-empty
+	// Skip reconciliation if the node already has all required labels
+	if hasAllLabels(&node) {
+		logger.Info("Node already has all required labels", "NodeName", node.Name)
+		// Requeue after 12 hours for periodic refresh
+		return ctrl.Result{RequeueAfter: 12 * time.Hour}, nil
+	}
 
 	// 2. Query Nautobot to get site and rack info
 	deviceData, err := r.NautobotClient.GetDeviceData(node.Name)
 	if err != nil {
 		logger.Error(err, "Failed to get device data from Nautobot", "NodeName", node.Name)
-		// You may choose to requeue with some backoff or just return an error
-		return ctrl.Result{}, err
+		// Requeue with backoff for errors
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
 
 	// 3. Update node labels if needed
@@ -146,13 +153,13 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		node.Labels = map[string]string{}
 	}
 
-	// Example: label the node "topology.kubernetes.io/zone" with the site name
-	// and "topology.kubernetes.io/rack" with the rack name
-	if node.Labels["topology.kubernetes.io/zone"] != deviceData.SiteName {
+	// Only update if the value is different and the new value is not empty
+	if deviceData.SiteName != "" && node.Labels["topology.kubernetes.io/zone"] != deviceData.SiteName {
 		node.Labels["topology.kubernetes.io/zone"] = deviceData.SiteName
 		updated = true
 	}
-	if node.Labels["topology.kubernetes.io/rack"] != deviceData.RackName {
+
+	if deviceData.RackName != "" && node.Labels["topology.kubernetes.io/rack"] != deviceData.RackName {
 		node.Labels["topology.kubernetes.io/rack"] = deviceData.RackName
 		updated = true
 	}
@@ -161,11 +168,27 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if updated {
 		logger.Info("Updating node labels", "NodeName", node.Name, "Site", deviceData.SiteName, "Rack", deviceData.RackName)
 		if err := r.Update(ctx, &node); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update node labels: %w", err)
+			logger.Error(err, "Failed to update node labels")
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
+		return ctrl.Result{RequeueAfter: 1 * time.Hour}, nil
 	}
 
-	return ctrl.Result{}, nil
+	// If we got here, no updates were needed
+	logger.Info("No label updates needed", "NodeName", node.Name)
+	return ctrl.Result{RequeueAfter: 6 * time.Hour}, nil
+}
+
+// hasAllLabels checks if the node already has all the required labels with non-empty values
+func hasAllLabels(node *corev1.Node) bool {
+	if node.Labels == nil {
+		return false
+	}
+
+	zone, hasZone := node.Labels["topology.kubernetes.io/zone"]
+	rack, hasRack := node.Labels["topology.kubernetes.io/rack"]
+
+	return hasZone && hasRack && zone != "" && rack != ""
 }
 
 // SetupWithManager registers the controller with the manager
