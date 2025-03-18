@@ -1,0 +1,22 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "nautobot-node-labeler.fullname" . }}
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "nautobot-node-labeler.fullname" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "nautobot-node-labeler.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "nautobot-node-labeler.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }} 

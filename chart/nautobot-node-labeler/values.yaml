@@ -1,0 +1,53 @@
+# Default values for nautobot-node-labeler
+replicaCount: 1
+
+image:
+  repository: nautobot-node-labeler
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+nautobotConfig:
+  # You can either specify the values directly (will be stored in a secret)
+  url: ""
+  token: ""
+  # Or use an existing secret
+  existingSecret: ""
+  existingSecretKey: "token"
+  existingUrlKey: "url" 
