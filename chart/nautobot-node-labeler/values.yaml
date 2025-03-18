@@ -2,7 +2,7 @@
 replicaCount: 1
 
 image:
-  repository: nautobot-node-labeler
+  repository: ghcr.io/your-username/nautobot-node-labeler
   pullPolicy: IfNotPresent
   tag: "latest"
 
